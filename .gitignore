@@ -1,0 +1,23 @@
+# Credentials and secrets
+.env
+.env.*
+*.pem
+*.key
+*.cert
+*.crt
+*secret*
+
+# Binaries and build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+dist/
+bin/
+build/
+
+# macOS specific
+.DS_Store
