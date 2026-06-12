@@ -71,8 +71,9 @@ type jiraPriority struct {
 }
 
 type jiraAssignee struct {
-	AccountID   string `json:"accountId"`
-	DisplayName string `json:"displayName"`
+	AccountID    string `json:"accountId"`
+	DisplayName  string `json:"displayName"`
+	EmailAddress string `json:"emailAddress"`
 }
 
 type boardConfigResponse struct {
@@ -92,6 +93,7 @@ type boardColumn struct {
 type BoardMember struct {
 	AccountID   string
 	DisplayName string
+	Email       string
 }
 
 // --- Interface implementation ---
@@ -277,14 +279,21 @@ func (c *Client) GetBoardMembers(ctx context.Context) ([]BoardMember, error) {
 
 	// Build a display name map.
 	nameMap := make(map[string]string)
+	emailMap := make(map[string]string)
 	for _, ji := range result.Issues {
 		if ji.Fields.Assignee != nil && ji.Fields.Assignee.AccountID != "" {
 			nameMap[ji.Fields.Assignee.AccountID] = ji.Fields.Assignee.DisplayName
+			if ji.Fields.Assignee.EmailAddress != "" {
+				emailMap[ji.Fields.Assignee.AccountID] = ji.Fields.Assignee.EmailAddress
+			}
 		}
 	}
 	for i, m := range members {
 		if name, ok := nameMap[m.AccountID]; ok {
 			members[i].DisplayName = name
+		}
+		if email, ok := emailMap[m.AccountID]; ok {
+			members[i].Email = email
 		}
 	}
 

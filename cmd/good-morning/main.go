@@ -169,6 +169,15 @@ func runInit(cmd *cobra.Command, args []string) {
 	larkAppSecret := prompt(reader, "Lark App Secret", os.Getenv("GOOD_MORNING_LARK_APP_SECRET"))
 	larkChatID := prompt(reader, "Lark Group Chat ID", os.Getenv("GOOD_MORNING_LARK_GROUP_CHAT_ID"))
 
+	var larkClient *lark.Client
+	if larkAppID != "" && larkAppSecret != "" {
+		larkClient = lark.NewClient(larkAppID, larkAppSecret, larkChatID)
+		if err := larkClient.Authenticate(); err != nil {
+			fmt.Printf("Warning: failed to authenticate with Lark: %v\n", err)
+			larkClient = nil
+		}
+	}
+
 	// ── Step 5: Team member mapping from Jira → Lark ─────────────────────────
 	fmt.Println("\n[4/5] Team Members")
 	fmt.Println("Connecting to Jira to fetch team members from the active sprint...")
@@ -200,7 +209,7 @@ func runInit(cmd *cobra.Command, args []string) {
 		}
 	} else {
 		fmt.Printf("Found %d unique assignee(s) in the active sprint.\n", len(boardMembers))
-		fmt.Println("For each Jira user, enter their Lark user ID (leave blank to skip).")
+		fmt.Println("For each Jira user, enter their Lark email or user ID (leave blank to skip).")
 		fmt.Println("(Tip: Lark user IDs look like ou_xxxxxxxxxxxxxxxxxxxxxxxx)")
 
 		// Keep existing mappings keyed by Jira account ID so re-running init preserves them.
@@ -222,7 +231,45 @@ func runInit(cmd *cobra.Command, args []string) {
 			}
 
 			fmt.Printf("\n  Jira user : %s (%s)\n", bm.DisplayName, bm.AccountID)
-			larkID := prompt(reader, "  Lark user ID (blank to skip)", defaultLark)
+			if bm.Email != "" {
+				fmt.Printf("  Jira email: %s\n", bm.Email)
+			}
+
+			var larkID string
+			if defaultLark != "" {
+				larkID = prompt(reader, "  Lark User ID (leave as is to keep)", defaultLark)
+			} else {
+				defaultInput := bm.Email
+				input := prompt(reader, "  Lark email or User ID (blank to skip)", defaultInput)
+				if input == "" {
+					continue
+				}
+				if strings.Contains(input, "@") {
+					if larkClient != nil {
+						fmt.Printf("  Looking up Lark user ID for %s...\n", input)
+						ids, err := larkClient.GetUserIDsByEmails(ctx, []string{input})
+						if err != nil {
+							fmt.Printf("  Warning: failed to lookup email: %v\n", err)
+						} else if ids[input] == "" {
+							fmt.Printf("  Warning: Lark user ID not found for email %s\n", input)
+						} else {
+							larkID = ids[input]
+							fmt.Printf("  ✓ Found Lark User ID: %s\n", larkID)
+						}
+					} else {
+						fmt.Println("  Warning: Lark client not authenticated, cannot lookup email.")
+					}
+					if larkID == "" {
+						larkID = prompt(reader, "  Please enter Lark User ID manually (blank to skip)", "")
+						if larkID == "" {
+							continue
+						}
+					}
+				} else {
+					larkID = input
+				}
+			}
+
 			if larkID == "" {
 				continue
 			}

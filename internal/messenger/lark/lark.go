@@ -157,3 +157,59 @@ func (c *Client) sendInteractiveCard(title string, message string) error {
 
 	return nil
 }
+
+// GetUserIDsByEmails looks up Lark User IDs by email addresses.
+// It returns a map of email to user_id.
+func (c *Client) GetUserIDsByEmails(ctx context.Context, emails []string) (map[string]string, error) {
+	if len(emails) == 0 {
+		return nil, nil
+	}
+
+	payload := map[string]interface{}{
+		"emails": emails,
+	}
+	body, _ := json.Marshal(payload)
+
+	url := c.baseURL + "/contact/v3/users/batch_get_id?user_id_type=user_id"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("building batch_get_id request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.accessToken)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("calling batch_get_id: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			UserList []struct {
+				UserID string `json:"user_id"`
+				Email  string `json:"email"`
+			} `json:"user_list"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decoding batch_get_id response: %w", err)
+	}
+	if result.Code != 0 {
+		return nil, fmt.Errorf("lark batch_get_id error (code=%d): %s", result.Code, result.Msg)
+	}
+
+	res := make(map[string]string)
+	for _, u := range result.Data.UserList {
+		if u.UserID != "" && u.Email != "" {
+			res[u.Email] = u.UserID
+		}
+	}
+
+	return res, nil
+}
+
