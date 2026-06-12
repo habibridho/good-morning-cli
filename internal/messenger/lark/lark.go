@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -84,8 +85,21 @@ func (c *Client) Authenticate() error {
 
 // SendMorningPlan implements messenger.Messenger.
 // It sends the LLM-generated message using an interactive card.
-func (c *Client) SendMorningPlan(_ context.Context, message string, members []messenger.Member) error {
-	// Replace mentions in the markdown text
+func (c *Client) SendMorningPlan(_ context.Context, message string, members []messenger.Member, issueLinks map[string]string) error {
+	// Replace issue keys with clickable Lark markdown links.
+	// We iterate over every key in issueLinks and replace whole-word occurrences
+	// so that e.g. "ABC-1" does not accidentally match inside "ABC-10".
+	for key, url := range issueLinks {
+		if key == "" || url == "" {
+			continue
+		}
+		// \b is a word boundary; regexp.QuoteMeta escapes any special chars in the key.
+		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(key) + `\b`)
+		link := fmt.Sprintf("[%s](%s)", key, url)
+		message = re.ReplaceAllString(message, link)
+	}
+
+	// Replace mentions in the markdown text.
 	for _, m := range members {
 		if m.Name != "" && m.MessengerUserID != "" {
 			mention := fmt.Sprintf("<at id=\"%s\"></at>", m.MessengerUserID)

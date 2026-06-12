@@ -118,7 +118,16 @@ func runBriefing(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to authenticate with Lark: %v", err)
 	}
 
-	if err := larkClient.SendMorningPlan(ctx, message, cfg.Members) ; err != nil {
+	// Build a tracker-agnostic map of issue key → URL so the messenger
+	// can render clickable links without knowing about Jira.
+	issueLinks := make(map[string]string, len(issues))
+	for _, issue := range issues {
+		if issue.Key != "" && issue.URL != "" {
+			issueLinks[issue.Key] = issue.URL
+		}
+	}
+
+	if err := larkClient.SendMorningPlan(ctx, message, cfg.Members, issueLinks); err != nil {
 		log.Fatalf("Failed to send message: %v", err)
 	}
 

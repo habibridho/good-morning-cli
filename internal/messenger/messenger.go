@@ -15,5 +15,8 @@ type Member struct {
 type Messenger interface {
 	// SendMorningPlan sends the morning plan message to the team channel.
 	// message is the LLM-generated text; members is used for @mentions.
-	SendMorningPlan(ctx context.Context, message string, members []Member) error
+	// issueLinks is a tracker-agnostic map of issue key to its URL
+	// (e.g. {"XYZ-123": "https://..."}) so the messenger can render
+	// clickable links without depending on any specific tracker.
+	SendMorningPlan(ctx context.Context, message string, members []Member, issueLinks map[string]string) error
 }
