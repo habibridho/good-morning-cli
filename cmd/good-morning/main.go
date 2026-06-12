@@ -181,7 +181,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	boardMembers, err := jiraClient.GetBoardMembers(ctx)
 	if err != nil {
 		fmt.Printf("Warning: could not fetch Jira users: %v\n", err)
-		fmt.Println("Falling back to manual entry. Format: jira_account_id:lark_user_id:display_name")
+		fmt.Println("Falling back to manual entry. Format: jira_account_id|lark_user_id|display_name|role")
 		for {
 			m := prompt(reader, "Add member (or leave blank to finish)", "")
 			if m == "" {
@@ -192,7 +192,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	} else if len(boardMembers) == 0 {
 		fmt.Println("No assignees found in the active sprint. You can add members manually.")
 		for {
-			m := prompt(reader, "Add member (jira_account_id:lark_user_id:display_name, blank to finish)", "")
+			m := prompt(reader, "Add member (jira_account_id|lark_user_id|display_name|role, blank to finish)", "")
 			if m == "" {
 				break
 			}
@@ -210,10 +210,14 @@ func runInit(cmd *cobra.Command, args []string) {
 		for _, bm := range boardMembers {
 			defaultLark := ""
 			defaultName := bm.DisplayName
+			defaultRole := "developer"
 			if ex, ok := existingByJiraID[bm.AccountID]; ok {
 				defaultLark = ex.larkID
 				if ex.name != "" {
 					defaultName = ex.name
+				}
+				if ex.role != "" {
+					defaultRole = ex.role
 				}
 			}
 
@@ -223,7 +227,8 @@ func runInit(cmd *cobra.Command, args []string) {
 				continue
 			}
 			displayName := prompt(reader, "  Display name", defaultName)
-			newMembers = append(newMembers, fmt.Sprintf("%s:%s:%s", bm.AccountID, larkID, displayName))
+			role := prompt(reader, "  Role (developer/tester)", defaultRole)
+			newMembers = append(newMembers, fmt.Sprintf("%s|%s|%s|%s", bm.AccountID, larkID, displayName, role))
 		}
 		if len(newMembers) > 0 {
 			members = newMembers
@@ -344,15 +349,25 @@ func buildDefaultBoardLink(baseURL, boardIDStr string) string {
 type existingMember struct {
 	larkID string
 	name   string
+	role   string
 }
 
 // parseExistingMembersByJiraID parses GOOD_MORNING_TEAM_MEMBERS into a map keyed by Jira account ID.
 func parseExistingMembersByJiraID(raw string) map[string]existingMember {
 	result := make(map[string]existingMember)
 	for _, part := range strings.Split(raw, ",") {
-		fields := strings.SplitN(strings.TrimSpace(part), ":", 3)
-		if len(fields) == 3 {
-			result[fields[0]] = existingMember{larkID: fields[1], name: fields[2]}
+		var fields []string
+		if strings.Contains(part, "|") {
+			fields = strings.Split(strings.TrimSpace(part), "|")
+		} else {
+			fields = strings.Split(strings.TrimSpace(part), ":")
+		}
+		if len(fields) >= 3 {
+			role := "developer"
+			if len(fields) == 4 {
+				role = fields[3]
+			}
+			result[fields[0]] = existingMember{larkID: fields[1], name: fields[2], role: role}
 		}
 	}
 	return result

@@ -8,21 +8,26 @@ import (
 )
 
 func TestParseMembers(t *testing.T) {
-	raw := "alice_jira:alice_lark:Alice,bob_jira:bob_lark:Bob"
+	raw := "alice_jira|alice_lark|Alice|tester,bob_jira:bob_lark:Bob,712020:uuid|lark_id|Charlie|developer"
 	members, err := parseMembers(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(members) != 2 {
-		t.Fatalf("expected 2 members, got %d", len(members))
+	if len(members) != 3 {
+		t.Fatalf("expected 3 members, got %d", len(members))
 	}
 
-	if members[0].Name != "Alice" || members[0].TrackerUserID != "alice_jira" || members[0].MessengerUserID != "alice_lark" {
+	if members[0].Name != "Alice" || members[0].TrackerUserID != "alice_jira" || members[0].MessengerUserID != "alice_lark" || members[0].Role != "tester" {
 		t.Errorf("unexpected parsed member 0: %+v", members[0])
 	}
-	if members[1].Name != "Bob" || members[1].TrackerUserID != "bob_jira" || members[1].MessengerUserID != "bob_lark" {
+	// Bob uses fallback ':'
+	if members[1].Name != "Bob" || members[1].TrackerUserID != "bob_jira" || members[1].MessengerUserID != "bob_lark" || members[1].Role != "developer" {
 		t.Errorf("unexpected parsed member 1: %+v", members[1])
+	}
+	// Charlie uses '|' and has colon in Jira ID
+	if members[2].Name != "Charlie" || members[2].TrackerUserID != "712020:uuid" || members[2].MessengerUserID != "lark_id" || members[2].Role != "developer" {
+		t.Errorf("unexpected parsed member 2: %+v", members[2])
 	}
 }
 

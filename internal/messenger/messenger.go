@@ -7,6 +7,7 @@ type Member struct {
 	Name            string // Display name
 	TrackerUserID   string // e.g. Jira account ID
 	MessengerUserID string // e.g. Lark user ID for @mention
+	Role            string // e.g. "developer" or "tester"
 }
 
 // Messenger is the interface that abstracts a messaging platform

@@ -66,46 +66,64 @@ func TestPriorityRank(t *testing.T) {
 func TestBuild(t *testing.T) {
 	sprint := tracker.Sprint{ID: 1, Name: "Sprint 1"}
 
-	mAlice := messenger.Member{TrackerUserID: "alice1", MessengerUserID: "lark_alice", Name: "Alice"}
-	mBob := messenger.Member{TrackerUserID: "bob2", MessengerUserID: "lark_bob", Name: "Bob"}
-	mCharlie := messenger.Member{TrackerUserID: "charlie3", MessengerUserID: "lark_charlie", Name: "Charlie"}
-	members := []messenger.Member{mAlice, mBob, mCharlie}
+	mAlice := messenger.Member{TrackerUserID: "alice1", MessengerUserID: "lark_alice", Name: "Alice", Role: "developer"}
+	mBob := messenger.Member{TrackerUserID: "bob2", MessengerUserID: "lark_bob", Name: "Bob", Role: "developer"}
+	mCharlie := messenger.Member{TrackerUserID: "charlie3", MessengerUserID: "lark_charlie", Name: "Charlie", Role: "developer"}
+	mDave := messenger.Member{TrackerUserID: "dave4", MessengerUserID: "lark_dave", Name: "Dave", Role: "tester"}
+	mEve := messenger.Member{TrackerUserID: "eve5", MessengerUserID: "lark_eve", Name: "Eve", Role: "tester"}
+	members := []messenger.Member{mAlice, mBob, mCharlie, mDave, mEve}
 
 	mapping := LaneMapping{
 		"Dev Done": tracker.LaneGroupReadyToDeploy,
 	}
 
-	// Alice has two tasks, one in Dev Done (high lane priority), one in To Do
+	// Alice has a task in Dev Done (Assignee)
 	issueAlice1 := tracker.Issue{Key: "A-1", AssigneeID: "alice1", Lane: "To Do", Priority: "Highest"}
 	issueAlice2 := tracker.Issue{Key: "A-2", AssigneeID: "alice1", Lane: "Dev Done", Priority: "Low"} // Should win because Lane is more important
 
-	// Bob has two tasks in the same lane, different priorities
-	issueBob1 := tracker.Issue{Key: "B-1", AssigneeID: "bob2", Lane: "In Progress", Priority: "Medium"}
-	issueBob2 := tracker.Issue{Key: "B-2", AssigneeID: "bob2", Lane: "In Progress", Priority: "High"} // Should win because priority is higher (1 < 2)
+	// Bob has no tasks, but there is an "In Review" task assigned to Alice
+	issueAlice3 := tracker.Issue{Key: "A-3", AssigneeID: "alice1", Lane: "In Review", Priority: "High"} // Bob should get this to review
 
-	// Charlie has no tasks
+	// Charlie is working on an "In Progress" task (P3).
+	issueCharlie1 := tracker.Issue{Key: "C-1", AssigneeID: "charlie3", Lane: "In Progress", Priority: "Low"}
 
-	issues := []tracker.Issue{issueAlice1, issueAlice2, issueBob1, issueBob2}
+	// There's another "In Review" task (P1). Since Charlie's task is P3 "In Progress", Charlie should be interrupted to review this.
+	issueCharlie2 := tracker.Issue{Key: "C-2", AssigneeID: "bob2", Lane: "In Review", Priority: "High"} // Actually assignee is bob2, Charlie reviews
+
+	// Testing issues
+	issueTest1 := tracker.Issue{Key: "T-1", AssigneeID: "alice1", Lane: "Ready to Test", Priority: "Highest"} // Should go to Dave
+	issueTest2 := tracker.Issue{Key: "T-2", AssigneeID: "alice1", Lane: "Testing", Priority: "Low"} // Should go to Eve
+	issueTest3 := tracker.Issue{Key: "T-3", AssigneeID: "bob2", Lane: "Ready to Test", Priority: "High"} // Not assigned because only 2 testers
+
+	issues := []tracker.Issue{issueAlice1, issueAlice2, issueAlice3, issueCharlie1, issueCharlie2, issueTest1, issueTest2, issueTest3}
 
 	plan := Build(sprint, issues, members, mapping)
 
-	if len(plan.Assignments) != 3 {
-		t.Fatalf("expected 3 assignments, got %d", len(plan.Assignments))
+	if len(plan.Assignments) != 5 {
+		t.Fatalf("expected 5 assignments, got %d", len(plan.Assignments))
 	}
 
 	for _, a := range plan.Assignments {
 		switch a.Member.Name {
 		case "Alice":
-			if a.Issue == nil || a.Issue.Key != "A-2" {
-				t.Errorf("Alice assignment: expected A-2, got %v", a.Issue)
+			if a.Issue == nil || a.Issue.Key != "A-2" || a.Reason != ReasonAssignee {
+				t.Errorf("Alice assignment: expected A-2 (Assignee), got %v (Reason: %s)", a.Issue, a.Reason)
 			}
 		case "Bob":
-			if a.Issue == nil || a.Issue.Key != "B-2" {
-				t.Errorf("Bob assignment: expected B-2, got %v", a.Issue)
+			if a.Issue == nil || a.Issue.Key != "A-3" || a.Reason != ReasonToReview {
+				t.Errorf("Bob assignment: expected A-3 (To Review), got %v (Reason: %s)", a.Issue, a.Reason)
 			}
 		case "Charlie":
-			if a.Issue != nil {
-				t.Errorf("Charlie assignment: expected nil, got %v", a.Issue)
+			if a.Issue == nil || a.Issue.Key != "C-2" || a.Reason != ReasonToReview {
+				t.Errorf("Charlie assignment: expected C-2 (To Review), got %v (Reason: %s)", a.Issue, a.Reason)
+			}
+		case "Dave":
+			if a.Issue == nil || a.Issue.Key != "T-2" || a.Reason != ReasonToTest {
+				t.Errorf("Dave assignment: expected T-2 (To Test), got %v (Reason: %s)", a.Issue, a.Reason)
+			}
+		case "Eve":
+			if a.Issue == nil || a.Issue.Key != "T-1" || a.Reason != ReasonToTest {
+				t.Errorf("Eve assignment: expected T-1 (To Test), got %v (Reason: %s)", a.Issue, a.Reason)
 			}
 		}
 	}

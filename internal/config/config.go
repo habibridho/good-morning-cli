@@ -144,7 +144,7 @@ func env(key string) string {
 	return os.Getenv(envPrefix + key)
 }
 
-// parseMembers parses "jira_id:lark_id:name,..." into []messenger.Member.
+// parseMembers parses "jira_id:lark_id:name:role,..." into []messenger.Member.
 func parseMembers(raw string) ([]messenger.Member, error) {
 	parts := strings.Split(raw, ",")
 	members := make([]messenger.Member, 0, len(parts))
@@ -153,14 +153,52 @@ func parseMembers(raw string) ([]messenger.Member, error) {
 		if part == "" {
 			continue
 		}
-		fields := strings.SplitN(part, ":", 3)
-		if len(fields) != 3 {
-			return nil, fmt.Errorf("invalid member entry %q: expected jira_id:lark_id:name", part)
+		var fields []string
+		if strings.Contains(part, "|") {
+			fields = strings.Split(part, "|")
+		} else {
+			fields = strings.Split(part, ":")
 		}
+		
+		if len(fields) < 3 {
+			return nil, fmt.Errorf("invalid member entry %q: expected jira_id|lark_id|name[|role]", part)
+		}
+		
+		// If using ':', and length is > 4, it's likely a jira_id with a colon that failed parsing.
+		// Tell them to use '|' instead.
+		if !strings.Contains(part, "|") && len(fields) > 4 {
+			return nil, fmt.Errorf("invalid member entry %q: too many colons, please use '|' as delimiter instead", part)
+		}
+
+		// Parse from right to left to allow jira_id to contain colons if they still use ':' and len is 4 or 3
+		var jiraID, larkID, name, role string
+		role = "developer"
+		
+		if len(fields) == 4 {
+			role = strings.TrimSpace(fields[3])
+			name = strings.TrimSpace(fields[2])
+			larkID = strings.TrimSpace(fields[1])
+			jiraID = strings.TrimSpace(fields[0])
+		} else if len(fields) == 3 {
+			name = strings.TrimSpace(fields[2])
+			larkID = strings.TrimSpace(fields[1])
+			jiraID = strings.TrimSpace(fields[0])
+		} else if len(fields) > 4 && strings.Contains(part, "|") {
+			// If using '|' and there's somehow more than 4, we just take the first 4
+			role = strings.TrimSpace(fields[3])
+			name = strings.TrimSpace(fields[2])
+			larkID = strings.TrimSpace(fields[1])
+			jiraID = strings.TrimSpace(fields[0])
+		} else {
+			// for the case of len(fields) > 4 and no '|', which we already handled above
+			return nil, fmt.Errorf("invalid member entry %q", part)
+		}
+
 		members = append(members, messenger.Member{
-			TrackerUserID:   strings.TrimSpace(fields[0]),
-			MessengerUserID: strings.TrimSpace(fields[1]),
-			Name:            strings.TrimSpace(fields[2]),
+			TrackerUserID:   jiraID,
+			MessengerUserID: larkID,
+			Name:            name,
+			Role:            role,
 		})
 	}
 	if len(members) == 0 {

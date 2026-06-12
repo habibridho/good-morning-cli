@@ -123,8 +123,13 @@ func buildPrompt(plan planner.MorningPlan) string {
 			continue
 		}
 		lane := laneDisplay(a.Issue.Lane)
-		sb.WriteString(fmt.Sprintf("- %s [%s | %s | %s]: %s (%s)\n",
+		reasonMsg := ""
+		if a.Reason != "" && a.Reason != planner.ReasonAssignee {
+			reasonMsg = fmt.Sprintf(" (%s)", a.Reason)
+		}
+		sb.WriteString(fmt.Sprintf("- %s%s [%s | %s | %s]: %s (%s)\n",
 			a.Member.Name,
+			reasonMsg,
 			a.Issue.Key,
 			lane,
 			a.Issue.Priority,
