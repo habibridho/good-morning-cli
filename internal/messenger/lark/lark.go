@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/habib-ridho/good-morning/internal/messenger"
@@ -81,42 +82,48 @@ func (c *Client) Authenticate() error {
 
 // --- Message types ---
 
-type postContent struct {
-	Tag    string `json:"tag"`
-	Text   string `json:"text,omitempty"`
-	Href   string `json:"href,omitempty"`
-	UserID string `json:"user_id,omitempty"`
-}
-
-// --- Messenger interface ---
-
 // SendMorningPlan implements messenger.Messenger.
-// It sends the LLM-generated message followed by one line per member
-// with their task, using @mentions.
-func (c *Client) SendMorningPlan(_ context.Context, message string, _ []messenger.Member) error {
-	// The LLM message is the full formatted content (it includes mentions).
-	// We send it as a plain text "post" message.
-	sections := [][]postContent{
-		{{Tag: "text", Text: message}},
+// It sends the LLM-generated message using an interactive card.
+func (c *Client) SendMorningPlan(_ context.Context, message string, members []messenger.Member) error {
+	// Replace mentions in the markdown text
+	for _, m := range members {
+		if m.Name != "" && m.MessengerUserID != "" {
+			mention := fmt.Sprintf("<at id=\"%s\"></at>", m.MessengerUserID)
+			// Replace @Name first, then Name, to avoid double replacing if LLM outputted @Name
+			message = strings.ReplaceAll(message, "@"+m.Name, mention)
+			message = strings.ReplaceAll(message, m.Name, mention)
+		}
 	}
 
-	return c.sendGroupMessage("🌅 Good Morning!", sections)
+	return c.sendInteractiveCard("🌅 Good Morning!", message)
 }
 
-// sendGroupMessage sends a rich Lark "post" message to the group chat.
-func (c *Client) sendGroupMessage(title string, sections [][]postContent) error {
-	content := map[string]interface{}{
-		"en_us": map[string]interface{}{
-			"title":   title,
-			"content": sections,
+// sendInteractiveCard sends a rich Lark "interactive" card message to the group chat.
+func (c *Client) sendInteractiveCard(title string, message string) error {
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"title": map[string]interface{}{
+				"tag":     "plain_text",
+				"content": title,
+			},
+			"template": "blue",
+		},
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag":     "markdown",
+				"content": message,
+			},
 		},
 	}
 
-	contentJSON, _ := json.Marshal(content)
+	contentJSON, _ := json.Marshal(card)
 
 	payload := map[string]interface{}{
 		"receive_id": c.chatID,
-		"msg_type":   "post",
+		"msg_type":   "interactive",
 		"content":    string(contentJSON),
 	}
 
@@ -150,23 +157,3 @@ func (c *Client) sendGroupMessage(title string, sections [][]postContent) error 
 
 	return nil
 }
-
-// textTag creates a text content element.
-func textTag(text string) postContent {
-	return postContent{Tag: "text", Text: text}
-}
-
-// mentionTag creates an @mention content element.
-func mentionTag(userID string) postContent {
-	return postContent{Tag: "at", UserID: userID}
-}
-
-// linkTag creates a hyperlink content element.
-func linkTag(text, href string) postContent {
-	return postContent{Tag: "a", Text: text, Href: href}
-}
-
-// Ensure unused helper suppression.
-var _ = textTag
-var _ = mentionTag
-var _ = linkTag
